@@ -131,7 +131,7 @@ minisec_df = pd.concat(temp_df)
 minisec_df['Race'] = 'Miami'
 
 #Upload to Mysql DB using sqlalchemy
-connection_string =  "mysql+mysqlconnector://root:prisonreform@localhost:3306/f1db2024"
+connection_string =  "mysql+mysqlconnector://root:youthought?@localhost:3306/f1db2024"
 engine = create_engine(connection_string, echo=True)
 lapsdf.to_sql('laptimes', con=engine, if_exists='replace', index=False)
 driver_df.to_sql('driver_master', con=engine, if_exists='replace', index=False)
