@@ -5,7 +5,8 @@ from dash import Dash, dcc, html, Input, Output,callback
 import dash_bootstrap_components as dbc
 from fetch_query import query_fetch
 
-data = query_fetch()
+roundrace
+data = query_fetch(rouundrace)
 df = data['Laptimes']
 minisecdf = data['MSEC']
 speedf = data['MSECAVG']
