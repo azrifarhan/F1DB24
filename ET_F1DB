@@ -1,0 +1,138 @@
+import fastf1 as ff1
+from fastf1 import plotting
+from fastf1 import utils
+import numpy as np
+import pandas as pd
+import lowess
+
+def ET_F1DB():
+    ff1.Cache.enable_cache(r'F:\Fast F1 Cache')
+    Race = ff1.get_session(2024, roundrace, 'Race')
+    data = Race.load(laps=True, telemetry=True, weather=False, messages=True, livedata=None)
+
+    driver = [['BOTTAS', 'BOT', 'KICK', 77],
+    ['ZHOU', 'ZHO', 'KICK', 24],
+    ['TSUNODA', 'TSU', 'RB', 22],
+    ['RICCIARDO', 'RIC', 'RB', 3],
+    ['GASLY', 'GAS', 'ALPINE', 10],
+    ['OCON', 'OCO', 'ALPINE', 31],
+    ['STROLL', 'STR', 'ASTON', 18],
+    ['ALONSO', 'ALO', 'ASTON', 14],
+    ['LECLERC', 'LEC', 'FERRARI', 16],
+    ['SAINZ', 'SAI', 'FERRARI', 55],
+    ['MAGNUSSEN', 'MAG', 'HAAS', 20],
+    ['HULKENBERG', 'HUL', 'HAAS', 27],
+    ['PIASTRI', 'PIA', 'MCLAREN', 81],
+    ['NORRIS', 'NOR', 'MCLAREN', 4],
+    ['HAMILTON', 'HAM', 'MERCEDES', 44],
+    ['RUSSEL', 'RUS', 'MERCEDES', 63],
+    ['VERSTAPPEN', 'VER', 'REDBULL', 1],
+    ['PEREZ', 'PER', 'REDBULL', 11],
+    ['LOGAN', 'SAR', 'WILLIAMS', 2],
+    ['ALBON', 'ALB', 'WILLIAMS', 23]]
+
+    driver_df = pd.DataFrame(driver, columns = ['Name','Nick','Team','Driver'])
+
+    #Create a dataframe for each driver so it is easier to make calculations
+    #Especially important for Locally Weighted Regression fx to smooth laptimes
+
+    for index, row in driver_df.iterrows():
+        name = row['Name']
+        nick = row['Nick']
+        vars()[name] = pd.DataFrame()
+        vars()[name] = Race.laps.pick_driver(nick)
+
+    for index, row in driver_df.iterrows():
+        name = row['Name']
+        vars()[name].loc[vars()[name]['LapTime'].isnull(),'LapTime']= vars()[name]['Sector1Time'] + vars()[name]['Sector2Time'] + vars()[name]['Sector3Time']
+
+    for index, row in driver_df.iterrows():
+        name = row['Name']
+        nick = row['Nick']
+        team = row['Team']
+        if not vars()[name].empty:
+            vars()[nick] = pd.DataFrame()
+            vars()[nick]['Driver_Num'] = vars()[name]['DriverNumber']
+            vars()[nick]['Laps'] = vars()[name]['LapNumber']
+            vars()[nick]['Postion'] = vars()[name]['Position']
+            vars()[nick]['LapTime'] = vars()[name]['LapTime']/ np.timedelta64(1, 's')
+            end = vars()[name]['Time']/ np.timedelta64(1, 's')
+            start = vars()[name]['LapStartTime']/ np.timedelta64(1, 's')
+            vars()[nick].loc[vars()[nick]['LapTime'].isnull(),'LapTime']= end - start
+            vars()[nick]['Smoothed'] = vars()[nick]['LapTime']
+            vars()[nick]['Tyres'] =  vars()[name]['Compound']
+            vars()[nick]['Stint'] = vars()[name]['Stint']
+            vars()[nick]['TrackStat'] = vars()[name]['TrackStatus']
+            vars()[nick]['PitIn'] = vars()[name]['PitInTime']/ np.timedelta64(1, 's')
+            vars()[nick]['PitOut'] = vars()[name]['PitOutTime']/ np.timedelta64(1, 's')
+            vars()[nick]['Sector 1 Speed Trap'] = vars()[name]['SpeedI1']
+            vars()[nick]['Sector 2 Speed Trap'] = vars()[name]['SpeedI2']
+
+    for index, row in driver_df.iterrows():
+        nick = row['Nick']
+        vars()[nick] = vars()[nick].reset_index()
+        vars()[nick] = vars()[nick].drop(['index'], axis=1)
+
+    #Locally Weighted Regression chosen for visualizations
+    #Pit laps and Yellow Flags causes SES to overshadow racing laps
+    for index, row in driver_df.iterrows():
+        nick = row['Nick']
+        x = vars()[nick]['Laps']
+        y= vars()[nick]['LapTime']
+        vars()[nick]['Smoothed']=lowess.lowess(x,y)
+
+    #Create a df with a list of drivers to concat the dataframes
+    TEST = driver_df['Nick'].tolist()
+    temp_df = [globals()[name] for name in TEST]
+    lapsdf = pd.concat(temp_df)
+    lapsdf['Race'] = roundrace
+
+    #Getting telemetry data for eachdriver
+    #Possibly dont need to do a df for each one
+    for index, row in driver_df.iterrows():
+        name = row['Name']
+        nick = row['Nick']
+        number = row['Driver']
+        vars()[name] = pd.DataFrame()
+        vars()[name] = Race.laps.pick_driver(nick).pick_fastest().get_telemetry()
+        vars()[name]['DriverNumber'] = number
+
+    #Minisector calculations based on https://medium.com/towards-formula-1-analysis/analyzing-formula-1-data-using-python-2021-abu-dhabi-gp-minisector-comparison-3d72aa39e5e8
+
+    num_minisectors = 25
+    total_distance = total_distance = max(VERSTAPPEN['Distance'])
+    minisector_length = total_distance / num_minisectors
+    minisectors = [0]
+    for i in range(0, (num_minisectors - 1)):
+        minisectors.append(minisector_length * (i + 1))
+
+        for index, row in driver_df.iterrows():
+            name = row['Name']
+            nick = row['Nick']
+            vars()[name]['Minisector'] = vars()[name]['Distance'].apply(
+                lambda dist: (
+                    int((dist // minisector_length) + 1)
+        )
+    )
+
+    for index, row in driver_df.iterrows():
+        name = row['Name']
+        nick = row['Nick']
+        number = row['Driver']
+        vars()[nick] = pd.DataFrame()
+        vars()[nick] = vars()[name].groupby(['Minisector'])['Speed'].mean().reset_index()
+        vars()[nick]['DriverNumber'] = number
+
+    # Again to concat all df into one
+    TEST = driver_df['Nick'].tolist()
+    temp_df = [globals()[name] for name in TEST]
+    minisec_df = pd.concat(temp_df)
+    minisec_df['Race'] = roundrace
+
+    minisec = pd.DataFrame()
+    minisec['Minisector'] = VERSTAPPEN['Minisector']
+    minisec['x'] = VERSTAPPEN['X'].round(1)
+    minisec['y'] = VERSTAPPEN['Y'].round(1)
+    minisec['Race'] = roundrace
+    return lapsdf,driver_df,minisec,minisec_df
+
